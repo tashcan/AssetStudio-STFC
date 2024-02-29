@@ -7,12 +7,12 @@
 struct AsFbxContext
 {
 
-	fbxsdk::FbxManager* pSdkManager;
-	fbxsdk::FbxScene* pScene;
-	fbxsdk::FbxArray<fbxsdk::FbxFileTexture*>* pTextures;
-	fbxsdk::FbxArray<fbxsdk::FbxSurfacePhong*>* pMaterials;
-	fbxsdk::FbxExporter* pExporter;
-	fbxsdk::FbxPose* pBindPose;
+	fbxsdk::FbxManager *pSdkManager;
+	fbxsdk::FbxScene *pScene;
+	fbxsdk::FbxArray<fbxsdk::FbxFileTexture *> *pTextures;
+	fbxsdk::FbxArray<fbxsdk::FbxSurfacePhong *> *pMaterials;
+	fbxsdk::FbxExporter *pExporter;
+	fbxsdk::FbxPose *pBindPose;
 
 	std::unordered_set<std::string> framePaths;
 

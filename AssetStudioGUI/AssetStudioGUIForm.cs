@@ -1565,7 +1565,7 @@ namespace AssetStudioGUI
                             toExportAssets = visibleAssets;
                             break;
                     }
-                    Studio.ExportAssets(saveFolderDialog.Folder, toExportAssets, exportType);
+                    Studio.ExportAssets(saveFolderDialog.Folder, toExportAssets, exportableAssets, exportType);
                 }
             }
             else
@@ -2047,6 +2047,21 @@ namespace AssetStudioGUI
         private void toolStripMenuItem15_Click(object sender, EventArgs e)
         {
             logger.ShowErrorMessage = toolStripMenuItem15.Checked;
+        }
+
+        private void allAssetsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportAssets(ExportFilter.All, ExportType.AssetTable);
+        }
+
+        private void selectedAssetsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportAssets(ExportFilter.Selected, ExportType.AssetTable);
+        }
+
+        private void filteredAssetsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportAssets(ExportFilter.Filtered, ExportType.AssetTable);
         }
 
         private void glControl1_MouseWheel(object sender, MouseEventArgs e)

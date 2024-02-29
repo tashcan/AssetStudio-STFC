@@ -8,7 +8,6 @@
     <Copyright>Copyright © Perfare 2018-2022</Copyright>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Mono.Cecil" Version="0.11.3" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0-beta13" />

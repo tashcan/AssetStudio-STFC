@@ -17,7 +17,8 @@ namespace AssetStudioGUI
     {
         Convert,
         Raw,
-        Dump
+        Dump,
+        AssetTable
     }
 
     internal enum ExportFilter
@@ -371,7 +372,7 @@ namespace AssetStudioGUI
             return typeMap;
         }
 
-        public static void ExportAssets(string savePath, List<AssetItem> toExportAssets, ExportType exportType)
+        public static void ExportAssets(string savePath, List<AssetItem> toExportAssets, List<AssetItem> allAssets, ExportType exportType)
         {
             ThreadPool.QueueUserWorkItem(state =>
             {
@@ -427,6 +428,12 @@ namespace AssetStudioGUI
                                 break;
                             case ExportType.Dump:
                                 if (ExportDumpFile(asset, exportPath))
+                                {
+                                    exportedCount++;
+                                }
+                                break;
+                            case ExportType.AssetTable:
+                                if (ExportAssetTable(asset, allAssets, exportPath))
                                 {
                                     exportedCount++;
                                 }

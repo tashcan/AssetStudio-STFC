@@ -113,7 +113,6 @@ namespace AssetStudio
                     return spriteImage;
                 }
             }
-
             return null;
         }
 

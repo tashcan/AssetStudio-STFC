@@ -1,14 +1,220 @@
 ﻿using AssetStudio;
 using Newtonsoft.Json;
+using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Text;
 
 namespace AssetStudioGUI
 {
+    /// <summary>
+    /// Performs 32-bit reversed cyclic redundancy checks.
+    /// </summary>
+    public class Crc32
+    {
+        #region Constants
+        /// <summary>
+        /// Generator polynomial (modulo 2) for the reversed CRC32 algorithm. 
+        /// </summary>
+        private const UInt32 s_generator = 0x04c11db7;
+        #endregion
+
+        #region Constructors
+        /// <summary>
+        /// Creates a new instance of the Crc32 class.
+        /// </summary>
+        public Crc32()
+        {
+            byte v1; // r10
+            uint v2; // eax
+            byte v3; // r8
+            int v4; // edx
+            uint v5; // ecx
+            int v6; // eax
+            uint v7; // er9
+            long result; // rax
+
+            v1 = 0;
+            m_checksumTable = new uint[256];
+            do
+            {
+                v2 = 0;
+                v3 = 0x80;
+                do
+                {
+                    v4 = (int)(v2 ^ 0x80000000);
+                    if ((v1 & v3) == 0)
+                        v4 = (int)v2;
+                    v2 = (uint)((2 * v4) ^ 0x4C11DB7);
+                    if (v4 >= 0)
+                        v2 = (uint)(2 * v4);
+                    v3 >>= 1;
+                }
+                while (v3 > 0);
+                v5 = ((2 * v2) ^ ((2 * v2) ^ (v2 >> 1)) & 0x55555555) >> 2;
+                v6 = (int)(4 * ((2 * v2) ^ ((2 * v2) ^ (v2 >> 1)) & 0x55555555));
+                v7 = (uint)((0x10 * (v6 ^ (v6 ^ v5) & 0x33333333)) ^ ((0x10 * (v6 ^ (v6 ^ v5) & 0x33333333)) ^ ((v6 ^ (v6 ^ v5) & 0x33333333) >> 4)) & 0xF0F0F0F);
+                result = (0x10101 * (((0x8020 * v1) & 0x88440) | (0x802 * v1) & 0x22110u)) >> 0x10;
+
+                var meow = (v7 << 8) ^ ((v7 << 8) ^ (v7 >> 8)) & 0xFF00FF;
+                meow = (meow >> 0x10) | (meow << (32 - 0x10));
+                m_checksumTable[(byte)((0x10101 * ((0x8020 * v1) & 0x88440 | (0x802 * v1) & 0x22110u)) >> 0x10)] = meow;
+                ++v1;
+            }
+            while (v1 > 0);
+
+            // Constructs the checksum lookup table. Used to optimize the checksum.
+            //m_checksumTable = Enumerable.Range(0, 256).Select(i =>
+            //{
+            //    var tableEntry = (uint)i;
+            //    for (var j = 0; j < 8; ++j)
+            //    {
+            //        tableEntry = ((tableEntry & 1) != 0)
+            //            ? (s_generator ^ (tableEntry >> 1))
+            //            : (tableEntry >> 1);
+            //    }
+            //    return tableEntry;
+            //}).ToArray();
+        }
+        #endregion
+
+        #region Methods
+        /// <summary>
+        /// Calculates the checksum of the byte stream.
+        /// </summary>
+        /// <param name="byteStream">The byte stream to calculate the checksum for.</param>
+        /// <returns>A 32-bit reversed checksum.</returns>
+        public Int32 Get<T>(IEnumerable<T> byteStream)
+        {
+            try
+            {
+                UInt32 crc = 0xffffffff;
+                var bytelength = byteStream.Count();
+                var i = 0;
+                while (bytelength-- != 0)
+                {
+                    crc = (uint)(m_checksumTable[(byte)crc ^ (Convert.ToByte(byteStream.ElementAt(i)))] ^ (crc >> 8));
+                    ++i;
+                }
+                // return (~crc); also works
+                return (int)(crc ^ 0xffffffff);
+            }
+            catch (FormatException e)
+            {
+                throw new Exception("Could not read the stream out as bytes.", e);
+            }
+            catch (InvalidCastException e)
+            {
+                throw new Exception("Could not read the stream out as bytes.", e);
+            }
+            catch (OverflowException e)
+            {
+                throw new Exception("Could not read the stream out as bytes.", e);
+            }
+        }
+        #endregion
+
+        #region Fields
+        /// <summary>
+        /// Contains a cache of calculated checksum chunks.
+        /// </summary>
+        private readonly UInt32[] m_checksumTable;
+
+        #endregion
+    }
+
+    public static class Utils
+    {
+        public static IEnumerable<KeyValuePair<object, object>> ForLinq(this IDictionaryEnumerator iter)
+        {
+            using (iter as IDisposable)
+            {
+                while (iter.MoveNext()) yield return new KeyValuePair<object, object>(iter.Key, iter.Value);
+            }
+        }
+    }
+
     internal static class Exporter
     {
+        public static bool ExportTexture2D(AssetItem item, string name, string exportPath)
+        {
+            var m_Texture2D = (Texture2D)item.Asset;
+            if (Properties.Settings.Default.convertTexture)
+            {
+                var type = Properties.Settings.Default.convertType;
+                if (!TryExportFileRename(exportPath, name, item, "." + type.ToString().ToLower(), out var exportFullPath))
+                    return false;
+                var image = m_Texture2D.ConvertToImage(true);
+                if (image == null)
+                    return false;
+                using (image)
+                {
+                    using (var file = File.OpenWrite(exportFullPath))
+                    {
+                        image.WriteToStream(file, type);
+                    }
+                    return true;
+                }
+            }
+            else
+            {
+                if (!TryExportFileRename(exportPath, name, item, ".tex", out var exportFullPath))
+                    return false;
+                File.WriteAllBytes(exportFullPath, m_Texture2D.image_data.GetData());
+                return true;
+            }
+        }
+        //public static bool ExportTexture2D(AssetItem item, string name, string exportPath)
+        //{
+        //    var m_Texture2D = (Texture2D)item.Asset;
+        //    if (Properties.Settings.Default.convertTexture)
+        //    {
+        //        var bitmap = m_Texture2D.ConvertToBitmap(true);
+        //        if (bitmap == null)
+        //            return false;
+        //        ImageFormat format = null;
+        //        var ext = Properties.Settings.Default.convertType;
+        //        bool tga = false;
+        //        switch (ext)
+        //        {
+        //            case "BMP":
+        //                format = ImageFormat.Bmp;
+        //                break;
+        //            case "PNG":
+        //                format = ImageFormat.Png;
+        //                break;
+        //            case "JPEG":
+        //                format = ImageFormat.Jpeg;
+        //                break;
+        //            case "TGA":
+        //                tga = true;
+        //                break;
+        //        }
+        //        if (!TryExportFileRename(exportPath, name, item, "." + ext.ToLower(), out var exportFullPath))
+        //            return false;
+        //        if (tga)
+        //        {
+        //            var file = new TGA(bitmap);
+        //            file.Save(exportFullPath);
+        //        }
+        //        else
+        //        {
+        //            bitmap.Save(exportFullPath, format);
+        //        }
+        //        bitmap.Dispose();
+        //        return true;
+        //    }
+        //    else
+        //    {
+        //        if (!TryExportFileRename(exportPath, name, item, ".tex", out var exportFullPath))
+        //            return false;
+        //        File.WriteAllBytes(exportFullPath, m_Texture2D.image_data.GetData());
+        //        return true;
+        //    }
+        //}
         public static bool ExportTexture2D(AssetItem item, string exportPath)
         {
             var m_Texture2D = (Texture2D)item.Asset;
@@ -248,6 +454,66 @@ namespace AssetStudioGUI
             return false;
         }
 
+        public static bool ExportSpriteName(AssetItem item, string name, string exportPath)
+        {
+            var type = Properties.Settings.Default.convertType;
+            if (!TryExportFileRename(exportPath, name, item, "." + type.ToString().ToLower(), out var exportFullPath))
+                return false;
+            var image = ((Sprite)item.Asset).GetImage();
+            if (image != null)
+            {
+                using (image)
+                {
+                    using (var file = File.OpenWrite(exportFullPath))
+                    {
+                        image.WriteToStream(file, type);
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        //public static bool ExportSpriteName(AssetItem item, string name, string exportPath)
+        //{
+        //    ImageFormat format = null;
+        //    var type = Properties.Settings.Default.convertType;
+        //    bool tga = false;
+        //    switch (type)
+        //    {
+        //        case "BMP":
+        //            format = ImageFormat.Bmp;
+        //            break;
+        //        case "PNG":
+        //            format = ImageFormat.Png;
+        //            break;
+        //        case "JPEG":
+        //            format = ImageFormat.Jpeg;
+        //            break;
+        //        case "TGA":
+        //            tga = true;
+        //            break;
+        //    }
+        //    if (!TryExportFileRename(exportPath, name, item, "." + type.ToLower(), out var exportFullPath))
+        //        return false;
+        //    var bitmap = ((Sprite)item.Asset).GetImage();
+        //    if (bitmap != null)
+        //    {
+        //        if (tga)
+        //        {
+        //            var file = new TGA(bitmap);
+        //            file.Save(exportFullPath);
+        //        }
+        //        else
+        //        {
+        //            bitmap.Save(exportFullPath, format);
+        //        }
+        //        bitmap.Dispose();
+        //        return true;
+        //    }
+        //    return false;
+        //}
+
         public static bool ExportRawFile(AssetItem item, string exportPath)
         {
             if (!TryExportFile(exportPath, item, ".dat", out var exportFullPath))
@@ -259,6 +525,24 @@ namespace AssetStudioGUI
         private static bool TryExportFile(string dir, AssetItem item, string extension, out string fullPath)
         {
             var fileName = FixFileName(item.Text);
+            fullPath = Path.Combine(dir, fileName + extension);
+            if (!File.Exists(fullPath))
+            {
+                Directory.CreateDirectory(dir);
+                return true;
+            }
+            fullPath = Path.Combine(dir, fileName + item.UniqueID + extension);
+            if (!File.Exists(fullPath))
+            {
+                Directory.CreateDirectory(dir);
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TryExportFileRename(string dir, string name, AssetItem item, string extension, out string fullPath)
+        {
+            var fileName = FixFileName(name);
             fullPath = Path.Combine(dir, fileName + extension);
             if (!File.Exists(fullPath))
             {
@@ -323,6 +607,146 @@ namespace AssetStudioGUI
             var fbxFormat = Properties.Settings.Default.fbxFormat;
             ModelExporter.ExportFbx(exportPath, convert, eulerFilter, filterPrecision,
                 exportAllNodes, exportSkins, exportAnimations, exportBlendShape, castToBone, boneSize, exportAllUvsAsDiffuseMaps, scaleFactor, fbxVersion, fbxFormat == 1);
+        }
+
+        private static void ExportAssetTableUsingPathID(List<AssetItem> allAssets, string exportPath, List<object> m_assets)
+        {
+            foreach (var i in m_assets)
+            {
+                if (i is OrderedDictionary m_i)
+                {
+                    var ident = m_i["m_identifier"] as string;
+                    var o_sprite_path = (m_i["m_originalSprite"] as OrderedDictionary)["m_PathID"];
+                    if (o_sprite_path is long m_o_sprite_path)
+                    {
+                        if (m_o_sprite_path == 0)
+                        {
+                            System.Console.WriteLine(o_sprite_path);
+                        }
+                        var asset = allAssets.Find((x) => x.m_PathID == m_o_sprite_path);
+                        if (asset is AssetItem m_asset)
+                        {
+                            if (m_asset.Type == ClassIDType.Sprite)
+                            {
+                                ExportSpriteName(m_asset, ident, exportPath);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        System.Console.WriteLine(o_sprite_path);
+                    }
+                }
+            }
+        }
+
+        private static void ExportAssetTableWithResources(List<object> m_assets, List<object> resources, List<KeyValuePair<string, int>> AssetIndices, List<AssetItem> allAssets, string exportPath)
+        {
+            for (int index = 0; index < m_assets.Count; index++)
+            {
+                var asset = m_assets[index];
+                var resource = resources[index];
+                // Crc32
+                if (asset is OrderedDictionary asset_dict)
+                {
+                    if (resource is OrderedDictionary resource_dict)
+                    {
+                        var ident = asset_dict["m_identifier"] as string;
+                        var crc = new Crc32();
+                        var guid = resource_dict["_editorGuid"] as string;
+                        var hashedGuid = crc.Get(guid);
+                        var AssetIndex = AssetIndices.Find(x => x.Value == hashedGuid);
+                        var a = allAssets.Find((x) => x.Text == AssetIndex.Key);
+                        if (a is AssetItem m_asset)
+                        {
+                            if (m_asset.Type == ClassIDType.Sprite)
+                            {
+                                ExportSpriteName(m_asset, ident, exportPath);
+                            }
+                            else if (m_asset.Type == ClassIDType.Texture2D)
+                            {
+                                ExportTexture2D(m_asset, ident, exportPath);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static bool ExportAssetTable2019(AssetItem item, List<KeyValuePair<string, int>> AssetIndices, List<AssetItem> allAssets, string exportPath)
+        {
+            var type = item.Asset.ToType();
+            var assets = type["m_assetTable"];
+            var resources = type["_resources"] as List<object>;
+            if (assets is List<object> m_assets)
+            {
+                if (resources != null)
+                {
+                    ExportAssetTableWithResources(m_assets, resources, AssetIndices, allAssets, exportPath);
+                }
+                else
+                {
+                    ExportAssetTableUsingPathID(allAssets, exportPath, m_assets);
+                }
+            }
+            return true;
+        }
+
+        private static bool ExportAssetTable2021(AssetItem item, List<KeyValuePair<string, int>> AssetIndices, List<AssetItem> allAssets, string exportPath)
+        {
+            var type = item.Asset.ToType();
+            var Entries = type["Entries"];
+            var resources = type["Resources"] as List<object>;
+            if (Entries is List<object> m_assets)
+            {
+                if (resources != null)
+                {
+                    ExportAssetTableWithResources(m_assets, resources, AssetIndices, allAssets, exportPath);
+                }
+                else
+                {
+                    ExportAssetTableUsingPathID(allAssets, exportPath, m_assets);
+                }
+            }
+            return true;
+        }
+
+        private static List<KeyValuePair<string, int>> LookupAssetIndices(List<AssetItem> allAssets)
+        {
+            var master_index = allAssets.Find(x => x.Text == "master_index");
+            var AssetBundles = master_index.Asset.ToType()["AssetBundles"] as List<object>;
+            var AssetIndices = new List<KeyValuePair<String, int>>();
+            foreach (var AssetBundle in AssetBundles)
+            {
+                var assetIndices = (AssetBundle as OrderedDictionary)["_assetIndices"] as List<object>;
+                var mappedIndices = assetIndices.Select(index =>
+                {
+                    var indexDict = index as OrderedDictionary;
+                    var name = indexDict["_name"] as String;
+                    var hashedGuid = (int)indexDict["_hashedGuid"];
+                    return new KeyValuePair<string, int>(name, hashedGuid);
+                }).ToList();
+                AssetIndices.AddRange(mappedIndices);
+            }
+            return AssetIndices;
+        }
+
+        public static bool ExportAssetTable(AssetItem item, List<AssetItem> allAssets, string exportPath)
+        {
+            if (item.Asset is MonoBehaviour m_MonoBehaviour)
+            {
+                var type = m_MonoBehaviour.ToType();
+                var AssetIndices = LookupAssetIndices(allAssets);
+                if (type.Contains("m_assetTable"))
+                {
+                    return ExportAssetTable2019(item, AssetIndices, allAssets, exportPath);
+                }
+                else
+                {
+                    return ExportAssetTable2021(item, AssetIndices, allAssets, exportPath);
+                }
+            }
+            return false;
         }
 
         public static bool ExportDumpFile(AssetItem item, string exportPath)
